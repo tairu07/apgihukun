@@ -36,16 +36,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // バッチレコードを作成
-    const batch = await prisma.inventoryBatch.create({
-      data: {
-        rawText,
-        importedByUserId: session.user.id,
-        totalAmount: parseResult.totalAmount,
-        count: validCodes.length,
-      }
-    })
-
     let insertedCount = 0
     let skippedCount = 0
     const errors: string[] = []
@@ -54,59 +44,58 @@ export async function POST(req: NextRequest) {
     for (const codeData of validCodes) {
       try {
         const codeHash = hmac(codeData.code)
-        const codeEnc = encrypt(codeData.code)
+        const encryptedCode = encrypt(codeData.code)
 
+        // Supabaseのテーブル名に合わせて修正
         await prisma.giftCode.create({
           data: {
-            codeEnc,
-            codeHash,
+            code: codeData.code, // 元のコード（マスク表示用）
             amount: codeData.amount,
-            importedBatchId: batch.id,
-            status: 'UNASSIGNED',
+            encryptedCode: encryptedCode,
+            codeHash: codeHash,
+            status: 'available',
           }
         })
         
         insertedCount++
       } catch (error: any) {
+        console.error('Individual code error:', error)
         // 一意制約違反（重複）の場合はスキップ
         if (error.code === 'P2002') {
           skippedCount++
         } else {
-          errors.push(`コード ${codeData.code}: ${error.message}`)
+          errors.push(`コード ${codeData.code.substring(0, 4)}****: ${error.message}`)
         }
       }
     }
 
-    // 監査ログを記録
-    await prisma.auditLog.create({
-      data: {
-        actorUserId: session.user.id,
-        action: 'INVENTORY_IMPORT',
-        entityType: 'InventoryBatch',
-        entityId: batch.id,
-        diffJson: JSON.stringify({
-          totalCodes: validCodes.length,
-          inserted: insertedCount,
-          skipped: skippedCount,
-          totalAmount: parseResult.totalAmount
-        }),
-        ip: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
-        ua: req.headers.get('user-agent') || 'unknown',
-      }
-    })
-
+    // 成功レスポンス
     return NextResponse.json({
       success: true,
-      batchId: batch.id,
       inserted: insertedCount,
       skipped: skippedCount,
       totalAmount: parseResult.totalAmount,
       errors: errors.length > 0 ? errors : undefined
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Commit error:', error)
+    
+    // より詳細なエラー情報を返す
+    let errorMessage = '登録中にエラーが発生しました'
+    if (error.code === 'P2002') {
+      errorMessage = '重複するギフトコードが検出されました'
+    } else if (error.code === 'P2025') {
+      errorMessage = 'データベーステーブルが見つかりません'
+    } else if (error.message) {
+      errorMessage = `エラー: ${error.message}`
+    }
+    
     return NextResponse.json(
-      { error: '登録中にエラーが発生しました' },
+      { 
+        error: errorMessage,
+        details: error.message,
+        code: error.code 
+      },
       { status: 500 }
     )
   }
