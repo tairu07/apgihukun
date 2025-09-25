@@ -1,0 +1,16 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "NEXTAUTH_URL": "https://apgihukun.vercel.app",
+    "NEXTAUTH_SECRET": "23254749985a130dc847b3220d5f8beb16724b9188648469fefbadfc80399abf",
+    "ENCRYPTION_KEY_HEX": "0a767d344c86dbc9640329ab7bce980c7e195b89916f3dc43d0d2ecacb5e3fe8"
+  }
+}
