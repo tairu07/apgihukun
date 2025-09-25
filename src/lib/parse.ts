@@ -22,7 +22,18 @@ export type ParseResult = {
  * @returns 解析結果
  */
 export function parseGiftCodeText(rawText: string): ParseResult {
-  const lines = rawText.split('\n').map(line => line.trim()).filter(line => line.length > 0)
+  // より柔軟な行分割処理
+  const lines = rawText
+    .split(/[\r\n]+/)  // 改行で分割
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    // 1行に複数のコードが含まれている場合の処理
+    .flatMap(line => {
+      // スペースが多い場合は複数のエントリに分割
+      const parts = line.split(/\s{4,}/)  // 4つ以上の連続スペースで分割
+      return parts.filter(part => part.trim().length > 0)
+    })
+
   const codes: ParsedCode[] = []
   const seenCodes = new Set<string>()
   let duplicateCount = 0
@@ -62,16 +73,16 @@ export function parseGiftCodeText(rawText: string): ParseResult {
 function parseSingleLine(line: string, lineNumber: number): ParsedCode {
   // 様々な形式に対応する正規表現
   const patterns = [
-    // "ABCD1234EFGH5678    ¥50,000" 形式（複数スペース・タブ対応）
-    /^([A-Z0-9]{16})\s*[¥￥]?\s*([\d,]+)\s*円?$/i,
-    // "ABCD1234EFGH5678 50000" 形式
-    /^([A-Z0-9]{16})\s+([\d,]+)$/i,
-    // "¥50,000 ABCD1234EFGH5678" 形式（逆順）
+    // "X9D5YZT5787Y57PG    ¥50,000" 形式（複数スペース対応）
+    /^([A-Z0-9]{16})\s+[¥￥]?\s*([\d,]+)\s*円?$/i,
+    // "X9D5YZT5787Y57PG¥50,000" 形式（スペースなし）
+    /^([A-Z0-9]{16})[¥￥]\s*([\d,]+)\s*円?$/i,
+    // "¥50,000 X9D5YZT5787Y57PG" 形式（逆順）
     /^[¥￥]?\s*([\d,]+)\s*円?\s+([A-Z0-9]{16})$/i,
-    // タブ区切り "ABCD1234EFGH5678\t¥50,000"
-    /^([A-Z0-9]{16})\s*\t+\s*[¥￥]?\s*([\d,]+)\s*円?$/i,
-    // 複数の空白・タブ混在 "ABCD1234EFGH5678    ¥50,000"
-    /^([A-Z0-9]{16})[\s\t]+[¥￥]?\s*([\d,]+)\s*円?$/i,
+    // タブ区切り "X9D5YZT5787Y57PG\t¥50,000"
+    /^([A-Z0-9]{16})\t+[¥￥]?\s*([\d,]+)\s*円?$/i,
+    // 非常に柔軟なパターン（16桁英数字と数字を抽出）
+    /([A-Z0-9]{16}).*?[¥￥]?\s*([\d,]+)/i,
   ]
 
   for (const pattern of patterns) {
