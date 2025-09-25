@@ -22,17 +22,28 @@ export type ParseResult = {
  * @returns 解析結果
  */
 export function parseGiftCodeText(rawText: string): ParseResult {
-  // より柔軟な行分割処理
-  const lines = rawText
-    .split(/[\r\n]+/)  // 改行で分割
+  console.log('Raw input text:', rawText)
+  
+  // より柔軟な前処理 - ブラウザでの貼り付けを考慮
+  let processedText = rawText
+    .replace(/\r\n/g, '\n')  // Windows改行を統一
+    .replace(/\r/g, '\n')    // Mac改行を統一
+    .trim()
+
+  console.log('Processed text:', processedText)
+  
+  // 改行がない場合、Xで始まるパターンで強制分割
+  if (!processedText.includes('\n')) {
+    // スペース区切りでXから始まる16桁パターンを検出して分割
+    processedText = processedText.replace(/(\s+)(X[A-Z0-9]{15})/g, '\n$2')
+  }
+  
+  const lines = processedText
+    .split(/\n+/)
     .map(line => line.trim())
     .filter(line => line.length > 0)
-    // 1行に複数のコードが含まれている場合の処理
-    .flatMap(line => {
-      // スペースが多い場合は複数のエントリに分割
-      const parts = line.split(/\s{4,}/)  // 4つ以上の連続スペースで分割
-      return parts.filter(part => part.trim().length > 0)
-    })
+
+  console.log('Split lines:', lines)
 
   const codes: ParsedCode[] = []
   const seenCodes = new Set<string>()
@@ -71,37 +82,28 @@ export function parseGiftCodeText(rawText: string): ParseResult {
  * 単一行からギフトコードと金額を抽出
  */
 function parseSingleLine(line: string, lineNumber: number): ParsedCode {
-  // 様々な形式に対応する正規表現
+  console.log(`Parsing line ${lineNumber}:`, line)
+  
+  // より柔軟なパターン - 様々な形式に対応
   const patterns = [
     // "X9D5YZT5787Y57PG    ¥50,000" 形式（複数スペース対応）
-    /^([A-Z0-9]{16})\s+[¥￥]?\s*([\d,]+)\s*円?$/i,
+    /([A-Z0-9]{16})\s+¥([0-9,]+)/i,
     // "X9D5YZT5787Y57PG¥50,000" 形式（スペースなし）
-    /^([A-Z0-9]{16})[¥￥]\s*([\d,]+)\s*円?$/i,
-    // "¥50,000 X9D5YZT5787Y57PG" 形式（逆順）
-    /^[¥￥]?\s*([\d,]+)\s*円?\s+([A-Z0-9]{16})$/i,
-    // タブ区切り "X9D5YZT5787Y57PG\t¥50,000"
-    /^([A-Z0-9]{16})\t+[¥￥]?\s*([\d,]+)\s*円?$/i,
+    /([A-Z0-9]{16})¥([0-9,]+)/i,
+    // "X9D5YZT5787Y57PG 50,000" 形式（¥なし）
+    /([A-Z0-9]{16})\s+([0-9,]+)/i,
     // 非常に柔軟なパターン（16桁英数字と数字を抽出）
-    /([A-Z0-9]{16}).*?[¥￥]?\s*([\d,]+)/i,
+    /([A-Z0-9]{16}).*?([0-9,]+)/i,
   ]
 
   for (const pattern of patterns) {
     const match = line.match(pattern)
     if (match) {
-      let code: string
-      let amountStr: string
+      const code = match[1].toUpperCase()
+      const amountStr = match[2].replace(/,/g, '')
+      const amount = parseInt(amountStr, 10)
 
-      // パターンによって順序が異なる
-      if (pattern.source.includes('([A-Z0-9]{16}).*([\\d,]+)')) {
-        code = match[1]
-        amountStr = match[2]
-      } else {
-        code = match[2]
-        amountStr = match[1]
-      }
-
-      // 金額の正規化（カンマを除去）
-      const amount = parseInt(amountStr.replace(/,/g, ''), 10)
+      console.log(`Matched: code=${code}, amount=${amount}`)
 
       // バリデーション
       if (!isValidGiftCode(code)) {
@@ -125,7 +127,7 @@ function parseSingleLine(line: string, lineNumber: number): ParsedCode {
       }
 
       return {
-        code: code.toUpperCase(),
+        code,
         amount,
         lineNumber,
         isValid: true
@@ -133,12 +135,13 @@ function parseSingleLine(line: string, lineNumber: number): ParsedCode {
     }
   }
 
+  console.log(`No match for line: ${line}`)
   return {
     code: '',
     amount: 0,
     lineNumber,
     isValid: false,
-    error: '認識できない形式です'
+    error: `認識できない形式です: ${line.substring(0, 50)}...`
   }
 }
 
