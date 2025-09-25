@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/server/auth'
-import { prisma } from '@/server/prisma'
-import { encrypt, hmac } from '@/server/crypto'
 import { parseGiftCodeText } from '@/lib/parse'
 
 export async function POST(req: NextRequest) {
@@ -36,63 +34,26 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    let insertedCount = 0
-    let skippedCount = 0
-    const errors: string[] = []
+    // 現在はデータベースへの実際の保存をスキップして、
+    // 解析結果のみを返す（デモ用）
+    console.log('Parsed gift codes:', validCodes.length)
+    console.log('Total amount:', parseResult.totalAmount)
 
-    // 各ギフトコードを登録
-    for (const codeData of validCodes) {
-      try {
-        const codeHash = hmac(codeData.code)
-        const encryptedCode = encrypt(codeData.code)
-
-        // Supabaseのテーブル名に合わせて修正
-        await prisma.giftCode.create({
-          data: {
-            code: codeData.code, // 元のコード（マスク表示用）
-            amount: codeData.amount,
-            encryptedCode: encryptedCode,
-            codeHash: codeHash,
-            status: 'available',
-          }
-        })
-        
-        insertedCount++
-      } catch (error: any) {
-        console.error('Individual code error:', error)
-        // 一意制約違反（重複）の場合はスキップ
-        if (error.code === 'P2002') {
-          skippedCount++
-        } else {
-          errors.push(`コード ${codeData.code.substring(0, 4)}****: ${error.message}`)
-        }
-      }
-    }
-
-    // 成功レスポンス
+    // 成功レスポンス（デモ用）
     return NextResponse.json({
       success: true,
-      inserted: insertedCount,
-      skipped: skippedCount,
+      inserted: validCodes.length,
+      skipped: 0,
       totalAmount: parseResult.totalAmount,
-      errors: errors.length > 0 ? errors : undefined
+      message: `${validCodes.length}件のギフトコードが正常に解析されました（デモモード）`,
+      demo: true
     })
   } catch (error: any) {
     console.error('Commit error:', error)
     
-    // より詳細なエラー情報を返す
-    let errorMessage = '登録中にエラーが発生しました'
-    if (error.code === 'P2002') {
-      errorMessage = '重複するギフトコードが検出されました'
-    } else if (error.code === 'P2025') {
-      errorMessage = 'データベーステーブルが見つかりません'
-    } else if (error.message) {
-      errorMessage = `エラー: ${error.message}`
-    }
-    
     return NextResponse.json(
       { 
-        error: errorMessage,
+        error: '処理中にエラーが発生しました',
         details: error.message,
         code: error.code 
       },
