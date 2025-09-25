@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GiftCodeStatus {
+  UNASSIGNED
+  ASSIGNED
+  SENT
+  VOID
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum AllocationStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+model GiftCode {
+  id               String          @id @default(cuid())
+  codeEnc          String          // AES-GCM base64 (iv|ciphertext|tag)
+  codeHash         String          @unique
+  amount           Int
+  status           GiftCodeStatus  @default(UNASSIGNED)
+  importedBatchId  String?
+  assignedAt       DateTime?
+  sentAt           DateTime?
+  lockId           String?
+  memberId         String?
+  deviceId         String?
+  assignedByUserId String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  // Relations
+  importedBatch    InventoryBatch? @relation(fields: [importedBatchId], references: [id])
+  member           Member?         @relation(fields: [memberId], references: [id])
+  device           Device?         @relation(fields: [deviceId], references: [id])
+  assignedByUser   User?           @relation(fields: [assignedByUserId], references: [id])
+  allocationItems  AllocationItem[]
+
+  @@map("gift_codes")
+}
+
+model InventoryBatch {
+  id               String     @id @default(cuid())
+  rawText          String
+  importedByUserId String
+  totalAmount      Int
+  count            Int
+  createdAt        DateTime   @default(now())
+
+  // Relations
+  importedByUser   User       @relation(fields: [importedByUserId], references: [id])
+  giftCodes        GiftCode[]
+
+  @@map("inventory_batches")
+}
+
+model Member {
+  id        String     @id @default(cuid())
+  name      String
+  contact   String?
+  note      String?
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+
+  // Relations
+  giftCodes   GiftCode[]
+  allocations Allocation[]
+
+  @@map("members")
+}
+
+model Device {
+  id          String     @id @default(cuid())
+  name        String
+  targetPrice Int
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  // Relations
+  giftCodes   GiftCode[]
+  allocations Allocation[]
+
+  @@map("devices")
+}
+
+model Allocation {
+  id        String            @id @default(cuid())
+  lockId    String            @unique
+  memberId  String
+  deviceId  String?
+  target    Int
+  total     Int
+  diff      Int
+  status    AllocationStatus  @default(CONFIRMED)
+  createdAt DateTime          @default(now())
+
+  // Relations
+  member    Member            @relation(fields: [memberId], references: [id])
+  device    Device?           @relation(fields: [deviceId], references: [id])
+  items     AllocationItem[]
+
+  @@map("allocations")
+}
+
+model AllocationItem {
+  id           String     @id @default(cuid())
+  allocationId String
+  giftCodeId   String
+  amount       Int
+
+  // Relations
+  allocation   Allocation @relation(fields: [allocationId], references: [id])
+  giftCode     GiftCode   @relation(fields: [giftCodeId], references: [id])
+
+  @@map("allocation_items")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  role      UserRole @default(OPERATOR)
+  twoFAHash String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  inventoryBatches InventoryBatch[]
+  assignedGiftCodes GiftCode[]
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String
+  action     String
+  entityType String
+  entityId   String
+  diffJson   String?
+  ip         String?
+  ua         String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  actor      User     @relation(fields: [actorUserId], references: [id])
+
+  @@map("audit_logs")
+}
