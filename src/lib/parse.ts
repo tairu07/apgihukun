@@ -62,14 +62,16 @@ export function parseGiftCodeText(rawText: string): ParseResult {
 function parseSingleLine(line: string, lineNumber: number): ParsedCode {
   // 様々な形式に対応する正規表現
   const patterns = [
-    // "ABCD1234EFGH5678 ¥1,000" 形式
+    // "ABCD1234EFGH5678    ¥50,000" 形式（複数スペース・タブ対応）
     /^([A-Z0-9]{16})\s*[¥￥]?\s*([\d,]+)\s*円?$/i,
-    // "ABCD1234EFGH5678 1000" 形式
+    // "ABCD1234EFGH5678 50000" 形式
     /^([A-Z0-9]{16})\s+([\d,]+)$/i,
-    // "¥1,000 ABCD1234EFGH5678" 形式（逆順）
+    // "¥50,000 ABCD1234EFGH5678" 形式（逆順）
     /^[¥￥]?\s*([\d,]+)\s*円?\s+([A-Z0-9]{16})$/i,
-    // タブ区切り
-    /^([A-Z0-9]{16})\t+[¥￥]?\s*([\d,]+)\s*円?$/i,
+    // タブ区切り "ABCD1234EFGH5678\t¥50,000"
+    /^([A-Z0-9]{16})\s*\t+\s*[¥￥]?\s*([\d,]+)\s*円?$/i,
+    // 複数の空白・タブ混在 "ABCD1234EFGH5678    ¥50,000"
+    /^([A-Z0-9]{16})[\s\t]+[¥￥]?\s*([\d,]+)\s*円?$/i,
   ]
 
   for (const pattern of patterns) {
@@ -141,8 +143,8 @@ function isValidGiftCode(code: string): boolean {
  * 金額の妥当性をチェック
  */
 function isValidAmount(amount: number): boolean {
-  // 正の整数で、一般的なギフトカード金額の範囲内
-  return Number.isInteger(amount) && amount > 0 && amount <= 100000
+  // 正の整数で、一般的なギフトカード金額の範囲内（上限を200,000に拡張）
+  return Number.isInteger(amount) && amount > 0 && amount <= 200000
 }
 
 /**
